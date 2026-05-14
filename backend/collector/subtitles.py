@@ -85,6 +85,24 @@ def _run_asr_fallback(ctx, v: VideoRecord, missing_langs: list[str], out_dir, jo
     fill in the *native* language of the audio (e.g. a Korean video with
     no subs gets a `ko.md`, not a `zh.md`).
     """
+    # ── Pre-flight: skip ASR when it definitionally cannot help ───────
+    # Whisper transcribes the AUDIO's native language only — it cannot
+    # translate. If this video already has at least one subtitle (manual
+    # or auto), that subtitle's language is almost certainly the audio's
+    # spoken language. Whisper would detect the same language and find
+    # it already filled, contributing nothing to the missing slots.
+    #
+    # ASR is only attempted when zero subtitles exist for the video, i.e.
+    # it's the channel's spoken-language slot we hope to fill.
+    existing_langs = [lang for lang, t in v.files.transcripts.items() if t]
+    if existing_langs:
+        ctx.log(
+            f"ASR skipped for {v.video_id}: already have subtitles in "
+            f"{existing_langs}. Whisper only transcribes the audio's native "
+            f"language — it cannot translate to {missing_langs}."
+        )
+        return
+
     # Short-circuit: if ASR has already failed once for this job, skip the rest
     # to avoid spamming `manifest.errors` with the same model-load error.
     if getattr(ctx, "_asr_broken", False):
