@@ -31,20 +31,25 @@ def is_available() -> bool:
 
 
 def _load_model(size: str):
+    """Load (and cache) a Whisper model. Returns (model_or_None, error_str_or_None)."""
     global _LOAD_ERROR
     if size in _MODELS:
-        return _MODELS[size]
+        return _MODELS[size], None
     if _LOAD_ERROR is not None:
-        return None
+        return None, _LOAD_ERROR
     try:
         from faster_whisper import WhisperModel
         # int8 quantization on CPU: 2-3× smaller memory + faster, almost no quality loss
         model = WhisperModel(size, device="cpu", compute_type="int8")
         _MODELS[size] = model
-        return model
+        return model, None
     except Exception as e:
-        _LOAD_ERROR = str(e)
-        return None
+        import traceback
+        _LOAD_ERROR = f"{type(e).__name__}: {e}"
+        # Print full traceback once so the user can copy/paste it
+        print(f"[transcribe] failed to load Whisper model '{size}':")
+        traceback.print_exc()
+        return None, _LOAD_ERROR
 
 
 # Map Whisper's detected ISO-639-1 codes to our 4 canonical codes
@@ -65,18 +70,22 @@ def canonical_lang(detected: str) -> Optional[str]:
 
 
 def transcribe(audio_path: str | Path, *, model_size: str = "small", beam_size: int = 1) -> dict:
-    """Run ASR on an audio file. Returns:
+    """Run ASR on an audio file. Always returns a dict.
+
+    Success:
         {
           "language":   detected ISO-639-1 (raw Whisper code, e.g. "en", "zh", "yue"),
           "canonical":  canonical code we use (en/zh/ja/ko) or None if unsupported,
           "duration":   audio duration in seconds (float),
           "segments":   list of {start, end, text}
         }
-    On failure (model load issue, etc.) returns an empty dict.
+
+    Failure (so the caller can decide what to do):
+        {"error": "<reason>", "phase": "load_model" | "transcribe"}
     """
-    model = _load_model(model_size)
+    model, load_err = _load_model(model_size)
     if model is None:
-        return {}
+        return {"error": load_err or "unknown model load failure", "phase": "load_model"}
     try:
         segments_gen, info = model.transcribe(
             str(audio_path),
@@ -95,8 +104,11 @@ def transcribe(audio_path: str | Path, *, model_size: str = "small", beam_size: 
             "language_probability": float(info.language_probability),
             "segments": segs,
         }
-    except Exception:
-        return {}
+    except Exception as e:
+        import traceback
+        print(f"[transcribe] transcription failed on {audio_path}:")
+        traceback.print_exc()
+        return {"error": f"{type(e).__name__}: {e}", "phase": "transcribe"}
 
 
 def segments_to_md_lines(segments: list[dict]) -> list[tuple[str, str]]:

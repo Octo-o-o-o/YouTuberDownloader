@@ -85,31 +85,58 @@ def _run_asr_fallback(ctx, v: VideoRecord, missing_langs: list[str], out_dir, jo
     fill in the *native* language of the audio (e.g. a Korean video with
     no subs gets a `ko.md`, not a `zh.md`).
     """
+    # Short-circuit: if ASR has already failed once for this job, skip the rest
+    # to avoid spamming `manifest.errors` with the same model-load error.
+    if getattr(ctx, "_asr_broken", False):
+        ctx.log(f"ASR skipped for {v.video_id}: ASR disabled after earlier failure in this job")
+        return
+
     if not asr.is_available():
-        ctx.log(f"ASR fallback requested but faster-whisper not installed (skipping {v.video_id})")
+        msg = "ASR requested but `faster-whisper` is not installed. Run: pip install -r requirements-extras.txt"
+        ctx.error(msg)
+        ctx._asr_broken = True  # type: ignore[attr-defined]
         return
 
     cfg = ctx.manifest.config
     audio_full = job_dir / v.files.audio_full
     if not audio_full.exists():
-        ctx.log(f"ASR fallback: audio file not found for {v.video_id}")
+        ctx.log(f"ASR skipped for {v.video_id}: extracted audio missing on disk")
         return
 
-    ctx.log(f"ASR fallback: transcribing {v.video_id} with model={cfg.asr_model}")
+    ctx.log(f"ASR: transcribing {v.video_id} with model={cfg.asr_model}")
     result = asr.transcribe(audio_full, model_size=cfg.asr_model)
-    if not result or not result.get("segments"):
-        ctx.error(f"ASR fallback produced no output for {v.video_id}")
+
+    # Failure path — surface the real reason and stop retrying for this job
+    if result.get("error"):
+        phase = result.get("phase", "?")
+        reason = result["error"]
+        hint = ""
+        if phase == "load_model":
+            hint = " (check network / disk space; first run downloads the model from HuggingFace)"
+        ctx.error(f"ASR unavailable [{phase}]: {reason}.{hint} Disabling ASR for the rest of this job.")
+        ctx._asr_broken = True  # type: ignore[attr-defined]
+        return
+
+    if not result.get("segments"):
+        ctx.log(f"ASR: no segments returned for {v.video_id} (possibly silent or unintelligible audio)")
         return
 
     detected_raw = result.get("language") or ""
     canonical = result.get("canonical")
-    ctx.log(f"ASR fallback: detected language={detected_raw} (canonical={canonical}, conf={result.get('language_probability', 0):.2f})")
+    conf = result.get("language_probability", 0)
+    ctx.log(f"ASR: detected '{detected_raw}' (canonical={canonical}, conf={conf:.2f}) for {v.video_id}")
 
     if not canonical:
-        ctx.log(f"ASR fallback: detected language '{detected_raw}' is outside our 4 supported codes")
+        ctx.log(
+            f"ASR: detected language '{detected_raw}' is outside our 4 supported codes (en/zh/ja/ko) — "
+            f"cannot fill any of the missing slots {missing_langs}"
+        )
         return
     if canonical not in missing_langs:
-        ctx.log(f"ASR fallback: language '{canonical}' was already provided by YouTube; skipping")
+        ctx.log(
+            f"ASR: audio language is '{canonical}' which already has a YouTube subtitle. "
+            f"Whisper cannot translate to {missing_langs} — those slots stay empty."
+        )
         return
 
     # Build the markdown
