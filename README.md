@@ -15,7 +15,7 @@
 | **下载视频** | ≤1080p mp4 + info.json + 缩略图，文件名 `<标题> [<video_id>].mp4` |
 | **提取音频** | AAC 64k mono；>10 MiB 时按"章节 > 字幕间隙 > 静音 > 硬切"四级 fallback 切分，每段 ≤10 MiB 且尽可能长 |
 | **字幕** | 每个视频生成 `<标题>.en.md` / `.zh.md` / `.ja.md` / `.ko.md`，手动字幕 > 自动字幕；缺失语种不创建文件 |
-| **ASR 兜底**（可选） | 无字幕的视频用 faster-whisper 本地转录原语种 |
+| **ASR 兜底**（可选） | **只对完全无字幕的视频**调用 faster-whisper 转录音频"母语"；已有任何字幕的视频直接跳过（Whisper 不能跨语种翻译，跑了也是白跑） |
 | **博主照片 3-5 张** | 频道头像 + 横幅 + InsightFace 人脸匹配的视频缩略图；头像不是真人脸时进入半自动确认（Web UI 点选） |
 
 ---
@@ -41,7 +41,10 @@ cd YouTubeDownload
 包含：
 
 - **`insightface` + `onnxruntime`** — 人脸识别，自动筛选博主本人的视频缩略图。不装则降级到 avatar + banner + 高播放缩略图（标 `unverified_`）。首次会下载 ~300MB 的 `buffalo_l` 模型。
-- **`faster-whisper`** — Whisper ASR 兜底。前端高级选项里勾"ASR fallback"或 CLI 加 `--asr` 启用。**只能转录音频本身的语种**（韩语视频 → `ko.md`），不能跨语种翻译。模型大小可选 tiny / base / small / medium / large-v3。
+- **`faster-whisper`** — Whisper ASR 兜底。前端高级选项里勾"ASR fallback"或 CLI 加 `--asr` 启用。
+  **关键限制**：Whisper 只能转录**音频本身的语种**（韩语视频 → `ko.md`），不能跨语种翻译。
+  **智能跳过**：对每个视频，只有在它**完全没有任何字幕**（en/zh/ja/ko 全部缺失）时才会触发 ASR。一旦视频有任意一个字幕（比如英文频道有 en 手动字幕），说明音频"母语"就是那个 — 此时跑 Whisper 必然只能再产出同一个语种，对填补 missing 的中日韩 0 价值，所以直接跳过整个 Whisper 调用，节省几分钟到几十分钟。
+  可选模型：tiny / base / small / medium / large-v3（越大越准但越慢）。
 
 ---
 
@@ -199,7 +202,12 @@ YouTube 限流。一会儿再试，或减少 `--scan-size`。yt-dlp 也会随版
 ```
 
 **Q：某语种字幕没生成？**
-说明该视频在 YouTube 上既无人工字幕也无该语种自动字幕。开 ASR 兜底（`--asr`）可至少补出原语种 md。
+说明该视频在 YouTube 上既无人工字幕也无该语种自动字幕。需要分两种情况：
+
+- 该视频**还有其它语种**的字幕（比如有英文但缺中日韩）→ ASR 帮不上。Whisper 只能转录音频原语种，不能跨语种翻译。这种情况已经是设计内行为，工具会跳过 ASR、不报错，只在 log.txt 里写一行说明。
+- 该视频**完全没有任何字幕**（4 个语种全空）→ 启用 `--asr` 后会跑 Whisper 转录，至少能补出原语种的 md。第一次跑会下载模型（tiny ~75MB / small ~500MB / medium ~1.5GB）。
+
+如果想要"英语视频也产出中日韩字幕"，那是**翻译任务**（不在本工具范围）— 你需要在 ASR 之后再接一层翻译模型，比如 NLLB-200 / LLM API / DeepL API。
 
 **Q：服务卡死或意外退出后任务还显示 running？**
 启动时会自动扫描并把这类"僵尸"任务标记为 `failed`，Web UI 上直接出现 retry 按钮。点一下从断点续跑（已下文件不重复下）。
