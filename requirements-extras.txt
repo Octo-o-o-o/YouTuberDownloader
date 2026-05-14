@@ -1,0 +1,13 @@
+# 可选依赖 — 启用博主本人脸识别功能
+# 安装：.venv/bin/pip install -r requirements-extras.txt
+#
+# 未安装时，工具会自动降级到"无人脸验证"模式：
+# 只下载 channel 头像 + banner + 高播放视频缩略图，
+# 标记为 unverified_<video_id>.jpg
+
+insightface>=0.7.3
+onnxruntime>=1.16
+
+# 可选：当视频无字幕时本地 ASR 转录（Whisper）
+# 启用方式：(1) 装这个包；(2) UI 高级选项里勾上 "ASR fallback"
+faster-whisper>=1.0

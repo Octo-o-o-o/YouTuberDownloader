@@ -1,0 +1,1592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>YT Creator Archive — 博主数据采集</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..900,0..100;1,9..144,300..900,0..100&family=Geist:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          paper:     '#FAFAF7',
+          paperDeep: '#F4F2EB',
+          ink:       '#0E0E0C',
+          smoke:     '#5A5A56',
+          faint:     '#8C8B83',
+          rule:      '#E4E2DB',
+          ruleDeep:  '#CFCCC2',
+          tape:      '#D9281A',
+          tapeDeep:  '#B11E12',
+          forest:    '#377348',
+          sienna:    '#B5631E'
+        },
+        fontFamily: {
+          serif: ['"Fraunces"', 'Georgia', 'serif'],
+          sans:  ['"Geist"', 'system-ui', 'sans-serif'],
+          mono:  ['"JetBrains Mono"', 'ui-monospace', 'monospace']
+        },
+        letterSpacing: {
+          tightest: '-0.04em',
+          label:    '0.18em'
+        }
+      }
+    }
+  };
+</script>
+
+<style>
+  :root {
+    --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  html, body {
+    background: #FAFAF7;
+    color: #0E0E0C;
+    font-family: 'Geist', system-ui, sans-serif;
+    font-feature-settings: 'ss01', 'cv11';
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Subtle grain texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    mix-blend-mode: multiply;
+  }
+  .display-serif {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: 'opsz' 144, 'SOFT' 50;
+    letter-spacing: -0.035em;
+    font-weight: 400;
+  }
+  .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Recording dot animation */
+  @keyframes rec-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.78); }
+  }
+  .rec-dot {
+    width: 8px; height: 8px;
+    background: #D9281A;
+    border-radius: 999px;
+    box-shadow: 0 0 0 0 rgba(217,40,26,0.45);
+    animation: rec-pulse 1.4s ease-in-out infinite;
+  }
+  /* Staggered fade-in on load */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .stagger > * {
+    opacity: 0;
+    animation: fade-up 0.7s var(--ease-out-soft) forwards;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0.05s; }
+  .stagger > *:nth-child(2) { animation-delay: 0.14s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.23s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.32s; }
+  .stagger > *:nth-child(5) { animation-delay: 0.40s; }
+  .stagger > *:nth-child(6) { animation-delay: 0.48s; }
+  .stagger > *:nth-child(7) { animation-delay: 0.56s; }
+  .stagger > *:nth-child(8) { animation-delay: 0.64s; }
+
+  /* Editorial input — underline style */
+  .editorial-input {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid #0E0E0C;
+    border-radius: 0;
+    padding: 14px 0 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    color: #0E0E0C;
+    width: 100%;
+    transition: border-color 0.25s var(--ease-out-soft);
+  }
+  .editorial-input:focus {
+    outline: none;
+    border-bottom-color: #D9281A;
+  }
+  .editorial-input::placeholder {
+    color: #8C8B83;
+    font-style: italic;
+  }
+  /* Frame corners for face candidates */
+  .frame-corners {
+    position: relative;
+  }
+  .frame-corners::before,
+  .frame-corners::after,
+  .frame-corners > .fc-bl,
+  .frame-corners > .fc-br {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    border: 1.5px solid transparent;
+    transition: border-color 0.2s ease;
+    pointer-events: none;
+  }
+  .frame-corners::before { top: -1px; left: -1px; border-top-color: currentColor; border-left-color: currentColor; }
+  .frame-corners::after  { top: -1px; right: -1px; border-top-color: currentColor; border-right-color: currentColor; }
+  .frame-corners > .fc-bl { bottom: -1px; left: -1px; border-bottom-color: currentColor; border-left-color: currentColor; }
+  .frame-corners > .fc-br { bottom: -1px; right: -1px; border-bottom-color: currentColor; border-right-color: currentColor; }
+
+  /* Tab underline */
+  .tab-trigger {
+    position: relative;
+    padding: 6px 0 14px;
+    cursor: pointer;
+  }
+  .tab-trigger::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 1.5px;
+    background: #D9281A;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.35s var(--ease-out-soft);
+  }
+  .tab-trigger[data-active="true"]::after { transform: scaleX(1); }
+
+  /* Progress bar */
+  .progress-rail {
+    height: 2px;
+    background: #E4E2DB;
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: #0E0E0C;
+    transition: width 0.6s var(--ease-out-soft);
+  }
+  .progress-fill[data-running="true"] { background: #D9281A; }
+
+  /* Scrollbar — subtle */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #CFCCC2; border-radius: 0; border: 3px solid #FAFAF7; }
+  ::-webkit-scrollbar-thumb:hover { background: #8C8B83; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* Modal overlay */
+  .overlay-enter {
+    animation: overlay-in 0.3s var(--ease-out-soft);
+  }
+  @keyframes overlay-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .modal-enter {
+    animation: modal-in 0.4s var(--ease-out-soft);
+  }
+  @keyframes modal-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.985); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Toast */
+  .toast-enter { animation: toast-in 0.35s var(--ease-out-soft); }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Header action buttons — outlined, fill on hover */
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px 7px 11px;
+    border: 1px solid #CFCCC2;       /* ruleDeep */
+    background: transparent;
+    color: #0E0E0C;                   /* ink */
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    line-height: 1;
+    transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    cursor: pointer;
+  }
+  .action-btn--neutral:hover {
+    background: #0E0E0C;
+    color: #FAFAF7;
+    border-color: #0E0E0C;
+  }
+  .action-btn--tape {
+    border-color: #D9281A;
+    color: #D9281A;
+  }
+  .action-btn--tape:hover {
+    background: #D9281A;
+    color: #FAFAF7;
+  }
+  .action-btn--danger {
+    color: #5A5A56;                   /* smoke — cautious default */
+  }
+  .action-btn--danger:hover {
+    background: #D9281A;
+    color: #FAFAF7;
+    border-color: #D9281A;
+  }
+
+  /* Marker label badge */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid currentColor;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    border-radius: 0;
+    line-height: 1;
+  }
+
+  /* Card hover */
+  .archive-row {
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .archive-row:hover {
+    background: #F4F2EB;
+  }
+
+  /* Smooth section reveals on tab content */
+  .tab-content {
+    animation: fade-up 0.45s var(--ease-out-soft);
+  }
+
+  /* Make the page feel like print */
+  .rule { border-color: #E4E2DB; }
+  .rule-deep { border-color: #CFCCC2; }
+  .rule-ink { border-color: #0E0E0C; }
+
+  /* Disable selection on chrome */
+  .no-select { user-select: none; }
+
+  /* Make video table title cell wrap nicely */
+  .clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>
+</head>
+<body>
+
+<div x-data="app()" x-init="init()" x-cloak class="relative z-10 min-h-screen">
+
+  <!-- ─── Top brand bar ─────────────────────────────────────────── -->
+  <header class="border-b rule">
+    <div class="max-w-[1180px] mx-auto px-8 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3 no-select">
+        <span class="rec-dot" style="animation-duration: 2.4s; opacity: 0.85;"></span>
+        <span class="label text-ink">YT — Creator Archive</span>
+      </div>
+      <div class="label text-faint flex items-center gap-5">
+        <span class="hidden sm:inline">Personal Research Dossier</span>
+        <span>v 0.1</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       HOME VIEW
+       ═══════════════════════════════════════════════════════════════ -->
+  <main x-show="view === 'home'" x-transition.opacity.duration.300ms class="max-w-[1180px] mx-auto px-8">
+
+    <!-- 01 — INTAKE ───────────────────────────────────────────────── -->
+    <section class="pt-20 pb-24 stagger">
+
+      <!-- Section marker -->
+      <div class="flex items-baseline justify-between mb-10">
+        <div class="label text-ink">01 — Intake</div>
+        <div class="label text-faint num">
+          <span x-text="new Date().toISOString().slice(0,10)"></span>
+        </div>
+      </div>
+
+      <!-- Headline -->
+      <h1 class="display-serif text-6xl md:text-7xl leading-[0.95] text-ink mb-6">
+        Archive a creator.
+      </h1>
+      <p class="text-smoke text-lg max-w-2xl leading-relaxed mb-14">
+        Paste a YouTube channel link below. The system will collect their
+        <span class="text-ink">latest 5</span> and <span class="text-ink">most-viewed 5</span> videos,
+        with subtitles in <span class="font-mono text-sm bg-paperDeep px-1.5 py-0.5">en · zh · ja · ko</span>,
+        audio split for transcription, and identifying photographs.
+      </p>
+
+      <!-- Intake form -->
+      <form @submit.prevent="submitJob()" class="max-w-3xl">
+        <label class="label text-faint block mb-2">Channel URL</label>
+        <div class="flex items-center gap-6">
+          <input
+            type="url"
+            x-model="form.channel_url"
+            placeholder="https://www.youtube.com/@..."
+            class="editorial-input flex-1"
+            required
+            :disabled="submitting"
+          />
+          <button
+            type="submit"
+            class="group flex items-center gap-3 px-6 py-3 bg-ink text-paper hover:bg-tape transition-colors duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
+            :disabled="submitting || !form.channel_url"
+          >
+            <span class="label" x-text="submitting ? 'Dispatching…' : 'Begin collection'"></span>
+            <svg class="w-3 h-3 transition-transform duration-300 group-hover:translate-x-1" viewBox="0 0 12 12" fill="none">
+              <path d="M1 6h10M7 2l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Advanced toggle -->
+        <button
+          type="button"
+          @click="showAdvanced = !showAdvanced"
+          class="mt-8 flex items-center gap-2 text-smoke hover:text-ink transition-colors"
+        >
+          <svg class="w-3 h-3 transition-transform" :class="showAdvanced && 'rotate-90'" viewBox="0 0 12 12" fill="none">
+            <path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+          </svg>
+          <span class="label">Advanced options</span>
+        </button>
+
+        <div x-show="showAdvanced" x-collapse class="mt-6 pl-5 border-l rule grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 py-4">
+          <div>
+            <label class="label text-faint block mb-2">Latest count</label>
+            <input type="number" x-model.number="form.latest_count" min="0" max="50" class="editorial-input num">
+          </div>
+          <div>
+            <label class="label text-faint block mb-2">Popular count</label>
+            <input type="number" x-model.number="form.popular_count" min="0" max="50" class="editorial-input num">
+          </div>
+          <div>
+            <label class="label text-faint block mb-2">Audio bitrate</label>
+            <input type="text" x-model="form.audio_bitrate" class="editorial-input num">
+          </div>
+          <div>
+            <label class="label text-faint block mb-2">Max audio MiB</label>
+            <input type="number" x-model.number="form.max_audio_mib" min="1" max="50" class="editorial-input num">
+          </div>
+          <div class="md:col-span-2">
+            <label class="label text-faint block mb-2">Subtitle languages</label>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="lang in ['en','zh','ja','ko']" :key="lang">
+                <label class="cursor-pointer">
+                  <input type="checkbox" :value="lang" x-model="form.languages" class="sr-only peer">
+                  <span class="badge text-faint peer-checked:text-ink peer-checked:border-ink transition-colors" x-text="lang"></span>
+                </label>
+              </template>
+            </div>
+          </div>
+          <label class="md:col-span-2 flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" x-model="form.skip_shorts" class="sr-only peer">
+            <span class="w-4 h-4 border rule-ink peer-checked:bg-ink relative">
+              <svg x-show="form.skip_shorts" class="absolute inset-0 w-full h-full text-paper" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6l3 3 5-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+              </svg>
+            </span>
+            <span class="label text-smoke">Skip Shorts (duration ≤ 60s)</span>
+          </label>
+
+          <!-- ASR fallback -->
+          <div class="md:col-span-2 pt-4 mt-2 border-t rule">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" x-model="form.asr_fallback" class="sr-only peer">
+              <span class="w-4 h-4 border rule-ink peer-checked:bg-ink relative">
+                <svg x-show="form.asr_fallback" class="absolute inset-0 w-full h-full text-paper" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+                </svg>
+              </span>
+              <span class="label text-smoke">ASR fallback for missing subtitles</span>
+              <span class="num text-xs text-faint">(Whisper, native language only)</span>
+            </label>
+            <div x-show="form.asr_fallback" class="mt-4 pl-7 flex items-center gap-4">
+              <span class="label text-faint">Model</span>
+              <template x-for="m in ['tiny','base','small','medium']" :key="m">
+                <label class="cursor-pointer">
+                  <input type="radio" :value="m" x-model="form.asr_model" class="sr-only peer">
+                  <span class="badge text-faint peer-checked:text-ink peer-checked:border-ink transition-colors" x-text="m"></span>
+                </label>
+              </template>
+              <span class="text-xs text-faint italic ml-2">larger = better quality, slower; first run downloads ~500MB</span>
+            </div>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <hr class="rule">
+
+    <!-- 02 — ARCHIVE LOG ──────────────────────────────────────────── -->
+    <section class="py-20">
+
+      <div class="flex items-baseline justify-between mb-10">
+        <div class="label text-ink">02 — Archive Log</div>
+        <div class="label text-faint num">
+          <span x-text="jobs.length"></span> <span>records</span>
+        </div>
+      </div>
+
+      <!-- Empty state with clickable examples -->
+      <div x-show="!loading && jobs.length === 0" class="border rule p-12">
+        <div class="display-serif text-3xl text-smoke italic mb-3">The archive is empty.</div>
+        <p class="text-faint mb-8">Begin by collecting your first creator above, or try one of these:</p>
+        <div class="space-y-1">
+          <template x-for="ex in exampleChannels" :key="ex.url">
+            <button
+              @click="form.channel_url = ex.url; window.scrollTo({ top: 0, behavior: 'smooth' });"
+              class="w-full flex items-center justify-between py-3 border-b rule last:border-b-0 hover:bg-paperDeep group transition-colors text-left">
+              <div class="flex items-center gap-5">
+                <span class="num text-xs text-faint w-6">→</span>
+                <span class="display-serif text-xl text-ink group-hover:text-tape transition-colors" x-text="ex.name"></span>
+                <span class="label text-faint" x-text="ex.tag"></span>
+              </div>
+              <span class="num text-xs text-faint group-hover:text-ink transition-colors" x-text="ex.url"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Loading state -->
+      <div x-show="loading" class="space-y-px">
+        <template x-for="i in 3" :key="i">
+          <div class="border rule px-7 py-6 flex items-center gap-6">
+            <div class="w-12 h-12 bg-paperDeep rounded-full"></div>
+            <div class="flex-1 space-y-2">
+              <div class="h-4 bg-paperDeep w-1/3"></div>
+              <div class="h-3 bg-paperDeep w-1/2"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Job rows -->
+      <div x-show="!loading && jobs.length > 0" class="border rule">
+        <template x-for="(job, idx) in jobs" :key="job.job_id">
+          <a
+            :href="`#/jobs/${job.job_id}`"
+            @click.prevent="openJob(job.job_id)"
+            class="archive-row group/row block px-7 py-6 cursor-pointer border-b last:border-b-0 rule"
+          >
+            <div class="flex items-center gap-7">
+              <!-- Index number -->
+              <div class="num text-faint text-xs w-7" x-text="String(jobs.length - idx).padStart(2,'0')"></div>
+
+              <!-- Avatar -->
+              <div class="w-12 h-12 bg-paperDeep flex items-center justify-center overflow-hidden flex-shrink-0">
+                <template x-if="job.channel_avatar">
+                  <img :src="job.channel_avatar" :alt="job.channel_title" class="w-full h-full object-cover">
+                </template>
+                <template x-if="!job.channel_avatar">
+                  <span class="display-serif text-xl text-smoke" x-text="(job.channel_title || '?').slice(0,1)"></span>
+                </template>
+              </div>
+
+              <!-- Title + meta -->
+              <div class="flex-1 min-w-0">
+                <div class="display-serif text-2xl text-ink leading-tight truncate">
+                  <template x-if="job.channel_title">
+                    <span x-text="job.channel_title"></span>
+                  </template>
+                  <template x-if="!job.channel_title">
+                    <span class="text-faint italic" x-text="job.status === 'running' || job.status === 'pending' ? 'Resolving channel…' : (channelHandleFromUrl(job.channel_url) || '(unknown)')"></span>
+                  </template>
+                </div>
+                <div class="mt-1 flex items-center gap-3 text-smoke text-sm">
+                  <span class="num text-xs" x-text="formatDate(job.created_at)"></span>
+                  <span class="text-ruleDeep">·</span>
+                  <span class="num text-xs"><span x-text="job.video_count || 0"></span> items</span>
+                  <template x-if="job.image_count">
+                    <span class="text-ruleDeep">·</span>
+                  </template>
+                  <template x-if="job.image_count">
+                    <span class="num text-xs"><span x-text="job.image_count"></span> photos</span>
+                  </template>
+                </div>
+              </div>
+
+              <!-- Status + progress -->
+              <div class="flex items-center gap-5 flex-shrink-0">
+                <template x-if="job.status === 'running' && !isStale(job)">
+                  <div class="flex items-center gap-3">
+                    <span class="rec-dot"></span>
+                    <span class="label text-tape num"><span x-text="Math.round((job.overall_progress || 0)*100)"></span>%</span>
+                  </div>
+                </template>
+                <template x-if="job.status === 'running' && isStale(job)">
+                  <button @click.stop.prevent="retryJob(job.job_id)"
+                          class="badge text-sienna hover:bg-sienna hover:text-paper transition-colors cursor-pointer"
+                          title="No updates for several minutes — click to retry">
+                    stalled ↻
+                  </button>
+                </template>
+                <template x-if="job.status === 'completed'">
+                  <span class="badge text-forest">complete</span>
+                </template>
+                <template x-if="job.status === 'failed'">
+                  <button @click.stop.prevent="retryJob(job.job_id)"
+                          class="badge text-tape hover:bg-tape hover:text-paper transition-colors cursor-pointer"
+                          title="Click to retry from where it stopped">
+                    failed · retry ↻
+                  </button>
+                </template>
+                <template x-if="job.status === 'needs_face_confirmation'">
+                  <span class="badge text-sienna">awaiting input</span>
+                </template>
+                <template x-if="job.status === 'pending' && !isStale(job)">
+                  <span class="badge text-faint">queued</span>
+                </template>
+                <template x-if="job.status === 'pending' && isStale(job)">
+                  <button @click.stop.prevent="retryJob(job.job_id)"
+                          class="badge text-sienna hover:bg-sienna hover:text-paper transition-colors cursor-pointer">
+                    stuck · retry ↻
+                  </button>
+                </template>
+
+                <!-- Delete (visible on row hover) -->
+                <button
+                  @click.stop.prevent="deleteJobFromList(job.job_id, job.channel_title)"
+                  class="label text-faint hover:text-tape transition-colors opacity-0 group-hover/row:opacity-100"
+                  title="Delete this entire collection (files included)"
+                >
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
+                    <path d="M3 3.5h8M5.5 3.5V2.5h3v1M4 3.5l.5 8h5l.5-8M6 5.5v4M8 5.5v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="square"/>
+                  </svg>
+                </button>
+
+                <!-- Arrow -->
+                <svg class="w-3 h-3 text-faint" viewBox="0 0 12 12" fill="none">
+                  <path d="M1 6h10M7 2l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+                </svg>
+              </div>
+            </div>
+          </a>
+        </template>
+      </div>
+    </section>
+
+    <!-- Footer note -->
+    <footer class="border-t rule py-10 mt-8">
+      <div class="flex items-center justify-between">
+        <div class="label text-faint">End of archive</div>
+        <div class="label text-faint num">
+          ※ for personal research use only
+        </div>
+      </div>
+    </footer>
+
+  </main>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       DETAIL VIEW
+       ═══════════════════════════════════════════════════════════════ -->
+  <main x-show="view === 'detail' && currentJob" x-transition.opacity.duration.300ms class="max-w-[1180px] mx-auto px-8">
+
+    <!-- Top nav row -->
+    <div class="py-6 flex items-center justify-between">
+      <button @click="backToHome()" class="group flex items-center gap-3 text-smoke hover:text-ink transition-colors">
+        <svg class="w-3 h-3 transition-transform group-hover:-translate-x-1" viewBox="0 0 12 12" fill="none">
+          <path d="M11 6H1M5 2L1 6l4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+        </svg>
+        <span class="label">Return to archive</span>
+      </button>
+      <div class="flex items-center gap-3">
+        <span class="label text-faint">Job ID</span>
+        <span class="num text-xs text-smoke" x-text="currentJob?.job_id"></span>
+
+        <!-- Visual divider between metadata and actions -->
+        <span class="block w-px h-5 bg-ruleDeep mx-1"></span>
+
+        <!-- OPEN FOLDER — neutral outlined -->
+        <button
+          @click="revealPath('')"
+          class="action-btn action-btn--neutral"
+          title="Open job folder in Finder"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
+            <path d="M1 4h4l1.2 1.2h6.8v7H1V4z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="miter"/>
+          </svg>
+          <span>Open folder</span>
+        </button>
+
+        <!-- RETRY — outlined red, only when actionable -->
+        <template x-if="canRetryCurrent()">
+          <button
+            @click="retryCurrentJob()"
+            class="action-btn action-btn--tape"
+            :title="status?.status === 'failed' ? 'Retry from where it stopped — already-downloaded files are skipped' : 'Job appears stalled — retry'"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
+              <path d="M2 7a5 5 0 1 1 1.5 3.6M2 10.5V7h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square" stroke-linejoin="miter"/>
+            </svg>
+            <span>Retry</span>
+          </button>
+        </template>
+
+        <!-- DELETE — neutral default, red on hover (destructive) -->
+        <button
+          @click="deleteCurrentJob()"
+          class="action-btn action-btn--danger"
+          title="Delete this collection (files included)"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
+            <path d="M3 3.5h8M5.5 3.5V2.5h3v1M4 3.5l.5 8h5l.5-8M6 5.5v4M8 5.5v4" stroke="currentColor" stroke-width="1.25" stroke-linecap="square"/>
+          </svg>
+          <span>Delete</span>
+        </button>
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- Channel header section -->
+    <section class="py-12">
+      <div class="flex items-start gap-8">
+        <!-- Avatar -->
+        <div class="w-24 h-24 bg-paperDeep flex items-center justify-center overflow-hidden flex-shrink-0">
+          <template x-if="currentJob?.channel?.avatar_url">
+            <img :src="currentJob.channel.avatar_url" class="w-full h-full object-cover">
+          </template>
+          <template x-if="!currentJob?.channel?.avatar_url">
+            <span class="display-serif text-4xl text-smoke" x-text="(currentJob?.channel?.title || '?').slice(0,1)"></span>
+          </template>
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <div class="label text-faint mb-2">Subject</div>
+          <h1 class="display-serif text-5xl text-ink leading-none mb-3">
+            <template x-if="currentJob?.channel?.title">
+              <span x-text="currentJob.channel.title"></span>
+            </template>
+            <template x-if="!currentJob?.channel?.title">
+              <span class="text-faint italic" x-text="status?.status === 'pending' || status?.stage === 'resolve_channel' || status?.stage === 'queued' ? 'Resolving channel…' : (channelHandleFromUrl(currentJob?.channel?.url) || '(unknown)')"></span>
+            </template>
+          </h1>
+          <div class="text-smoke flex flex-wrap items-center gap-3 text-sm">
+            <template x-if="currentJob?.channel?.url">
+              <a :href="currentJob.channel.url" target="_blank" class="hover:text-tape transition-colors num" x-text="currentJob.channel.url.replace(/^https?:\/\//,'')"></a>
+            </template>
+            <span class="text-ruleDeep">·</span>
+            <span class="num text-xs">Collected <span x-text="formatDate(currentJob?.created_at)"></span></span>
+            <span class="text-ruleDeep">·</span>
+            <span class="num text-xs"><span x-text="currentJob?.videos?.length || 0"></span> videos</span>
+            <span class="text-ruleDeep">·</span>
+            <span class="num text-xs"><span x-text="currentJob?.creator_images?.length || 0"></span> photos</span>
+          </div>
+        </div>
+
+        <!-- Status chip -->
+        <div class="flex flex-col items-end gap-3">
+          <template x-if="status?.status === 'running'">
+            <div class="flex items-center gap-2">
+              <span class="rec-dot"></span>
+              <span class="label text-tape">Recording</span>
+            </div>
+          </template>
+          <template x-if="status?.status === 'completed'">
+            <span class="badge text-forest">complete</span>
+          </template>
+          <template x-if="status?.status === 'failed'">
+            <span class="badge text-tape">failed</span>
+          </template>
+          <template x-if="status?.status === 'needs_face_confirmation'">
+            <button @click="openFaceModal()" class="badge text-sienna hover:bg-sienna hover:text-paper transition-colors cursor-pointer">
+              Confirm face →
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Progress: overall bar + stage checklist + errors -->
+      <div class="mt-10">
+        <!-- Overall bar -->
+        <div class="flex items-baseline justify-between mb-2">
+          <span class="label text-faint" x-text="status?.current_action || 'Idle'"></span>
+          <span class="label num text-ink"><span x-text="Math.round((status?.overall_progress || 0)*100)"></span>%</span>
+        </div>
+        <div class="progress-rail">
+          <div class="progress-fill" :style="`width: ${(status?.overall_progress || 0) * 100}%`" :data-running="status?.status === 'running'"></div>
+        </div>
+
+        <!-- Stage checklist -->
+        <div class="mt-8">
+          <div class="label text-faint mb-4">Stages</div>
+          <div class="border rule">
+            <template x-for="(stage, i) in stages" :key="stage.name">
+              <div class="px-5 py-3 flex items-center gap-5 border-b last:border-b-0 rule"
+                   :class="stageStatus(stage.name) === 'running' ? 'bg-paperDeep' : ''">
+                <!-- Index -->
+                <span class="num text-xs text-faint w-6" x-text="String(i+1).padStart(2,'0')"></span>
+                <!-- Icon -->
+                <span class="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                  <template x-if="stageStatus(stage.name) === 'done'">
+                    <svg class="w-4 h-4 text-forest" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/>
+                    </svg>
+                  </template>
+                  <template x-if="stageStatus(stage.name) === 'running'">
+                    <span class="rec-dot"></span>
+                  </template>
+                  <template x-if="stageStatus(stage.name) === 'pending'">
+                    <span class="block w-2 h-px bg-ruleDeep"></span>
+                  </template>
+                  <template x-if="stageStatus(stage.name) === 'failed'">
+                    <svg class="w-4 h-4 text-tape" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="square"/>
+                    </svg>
+                  </template>
+                </span>
+                <!-- Label -->
+                <span class="label flex-1"
+                      :class="{
+                        'text-ink': stageStatus(stage.name) === 'done' || stageStatus(stage.name) === 'running',
+                        'text-faint': stageStatus(stage.name) === 'pending',
+                        'text-tape': stageStatus(stage.name) === 'failed'
+                      }"
+                      x-text="stage.label"></span>
+                <!-- Right-side detail -->
+                <span class="num text-xs text-smoke text-right">
+                  <template x-if="stageStatus(stage.name) === 'running' && status?.stage_progress?.total > 1">
+                    <span><span x-text="status.stage_progress.current"></span> / <span x-text="status.stage_progress.total"></span></span>
+                  </template>
+                  <template x-if="stageStatus(stage.name) === 'running' && (!status?.stage_progress?.total || status?.stage_progress?.total <= 1)">
+                    <span class="text-tape" x-text="stageActionShort(status?.current_action)"></span>
+                  </template>
+                  <template x-if="stageStatus(stage.name) === 'done'">
+                    <span class="text-forest" x-text="stageDoneSummary(stage.name)"></span>
+                  </template>
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Anomalies panel -->
+        <template x-if="currentJob?.errors?.length">
+          <div class="mt-8 border border-tape">
+            <div class="px-5 py-3 border-b border-tape bg-paperDeep flex items-baseline justify-between">
+              <span class="label text-tape">Anomalies</span>
+              <span class="num text-xs text-tape"><span x-text="currentJob.errors.length"></span> recorded</span>
+            </div>
+            <ul class="px-5 py-4 space-y-2">
+              <template x-for="(err, i) in currentJob.errors" :key="i">
+                <li class="flex items-start gap-3 text-sm">
+                  <span class="num text-xs text-tape mt-0.5"><span x-text="String(i+1).padStart(2,'0')"></span></span>
+                  <span class="text-ink leading-snug font-mono text-xs break-all" x-text="String(err).slice(0,400)"></span>
+                </li>
+              </template>
+            </ul>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <!-- Tabs -->
+    <section class="pt-10">
+      <div class="flex items-baseline gap-12 border-b rule mb-10">
+        <template x-for="t in ['videos','images','log']" :key="t">
+          <button
+            class="tab-trigger label"
+            :class="tab === t ? 'text-ink' : 'text-faint hover:text-smoke'"
+            :data-active="tab === t"
+            @click="tab = t; if(t==='log') loadLog()"
+          >
+            <span x-text="t"></span>
+          </button>
+        </template>
+        <div class="flex-1"></div>
+        <div class="label text-faint num pb-4 hidden md:block">
+          <span x-text="tabCount()"></span>
+        </div>
+      </div>
+
+      <!-- Videos tab ──────────────────────────────────────── -->
+      <div x-show="tab === 'videos'" class="tab-content">
+        <template x-if="!currentJob?.videos || currentJob.videos.length === 0">
+          <div class="text-faint italic py-12 text-center">— No videos collected yet —</div>
+        </template>
+
+        <!-- Column legend -->
+        <div x-show="currentJob?.videos?.length" class="hidden md:flex items-baseline gap-4 px-7 pb-3 mb-0 border-b rule text-faint label">
+          <span class="w-8">№</span>
+          <span class="w-10">src</span>
+          <span class="flex-1">title · meta</span>
+          <span class="w-[176px] text-right">subtitles</span>
+          <span class="w-[210px] text-right">media</span>
+        </div>
+
+        <div class="border rule" x-show="currentJob?.videos?.length">
+          <template x-for="(v, idx) in (currentJob?.videos || [])" :key="v.video_id">
+            <div class="border-b last:border-b-0 rule px-7 py-5 flex items-center gap-4 hover:bg-paperDeep/40 transition-colors group/row">
+              <!-- № index -->
+              <span class="num text-xs text-faint w-8 flex-shrink-0">№ <span x-text="String(idx+1).padStart(2,'0')"></span></span>
+
+              <!-- Source markers -->
+              <div class="flex items-center gap-1 w-10 flex-shrink-0">
+                <template x-if="(v.source || []).includes('latest')">
+                  <span class="badge text-ink" title="Latest upload">L</span>
+                </template>
+                <template x-if="(v.source || []).includes('popular')">
+                  <span class="badge text-tape" title="Most viewed">P</span>
+                </template>
+              </div>
+
+              <!-- Title + meta (title links to YouTube) -->
+              <div class="flex-1 min-w-0">
+                <a :href="v.url" target="_blank" rel="noopener"
+                   class="display-serif text-lg text-ink leading-tight clamp-2 hover:text-tape transition-colors block"
+                   :title="v.title"
+                   x-text="v.title"></a>
+                <div class="mt-1 text-smoke text-xs flex items-center gap-2 flex-wrap">
+                  <span class="num" x-text="formatDuration(v.duration_sec)"></span>
+                  <span class="text-ruleDeep">·</span>
+                  <span class="num"><span x-text="formatViews(v.view_count)"></span> views</span>
+                  <span class="text-ruleDeep">·</span>
+                  <!-- video_id with copy buttons (visible on row hover) -->
+                  <span class="num text-faint group/id inline-flex items-center gap-1.5">
+                    <span x-text="v.video_id"></span>
+                    <button @click.stop="copyToClipboard(v.video_id, 'video_id')"
+                            class="opacity-0 group-hover/row:opacity-60 hover:!opacity-100 hover:text-ink transition-opacity"
+                            title="Copy video_id">
+                      <svg class="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                        <rect x="3" y="3" width="6.5" height="6.5" stroke="currentColor" stroke-width="1.2"/>
+                        <path d="M5 2.5h4.5v4.5" stroke="currentColor" stroke-width="1.2" fill="none"/>
+                      </svg>
+                    </button>
+                    <button @click.stop="copyToClipboard(v.url, 'URL')"
+                            class="opacity-0 group-hover/row:opacity-60 hover:!opacity-100 hover:text-ink transition-opacity"
+                            title="Copy video URL">
+                      <svg class="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                        <path d="M4 6a2 2 0 0 0 2 2h1.5M8 6a2 2 0 0 0-2-2H4.5M2 8a2 2 0 1 1 2-2M10 4a2 2 0 1 1-2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                      </svg>
+                    </button>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Subtitle access (4 langs, fixed slot) -->
+              <div class="flex items-center justify-end gap-3 w-[176px] flex-shrink-0">
+                <template x-for="lang in ['en','zh','ja','ko']" :key="lang">
+                  <template x-if="v.files?.transcripts?.[lang]">
+                    <button
+                      @click.stop="revealPath(v.files.transcripts[lang].path)"
+                      class="label transition-colors hover:text-tape"
+                      :class="subSourceClass(v.files.transcripts[lang].source)"
+                      :title="`${lang}.md · ${v.files.transcripts[lang].source} subtitle — click to reveal in Finder`"
+                      x-text="lang.toUpperCase()"></button>
+                  </template>
+                  <template x-if="!v.files?.transcripts?.[lang]">
+                    <span class="label text-faint line-through cursor-default"
+                          :title="`${lang} subtitle not available`"
+                          x-text="lang.toUpperCase()"></span>
+                  </template>
+                </template>
+              </div>
+
+              <!-- Media access (video / audio / folder) -->
+              <div class="flex items-center justify-end gap-4 w-[210px] flex-shrink-0">
+                <!-- Video -->
+                <template x-if="v.files?.video">
+                  <button @click.stop="revealPath(v.files.video)"
+                          class="label text-ink hover:text-tape transition-colors"
+                          title="Reveal video.mp4 in Finder">VIDEO</button>
+                </template>
+                <template x-if="!v.files?.video">
+                  <span class="label text-faint line-through cursor-default" title="Video not downloaded">VIDEO</span>
+                </template>
+
+                <!-- Audio (single or segmented) -->
+                <template x-if="v.files?.audio_full && (!v.files.audio_segments || v.files.audio_segments.length === 0)">
+                  <button @click.stop="revealPath(v.files.audio_full)"
+                          class="label text-ink hover:text-tape transition-colors flex items-baseline gap-1"
+                          :title="`${(v.files.audio_full_size_mib || 0).toFixed(1)} MiB — reveal audio in Finder`">
+                    <span>AUDIO</span>
+                  </button>
+                </template>
+                <template x-if="v.files?.audio_segments?.length">
+                  <button @click.stop="revealPath(v.files.audio_segments[0].path || v.files.audio_segments[0])"
+                          class="label text-ink hover:text-tape transition-colors flex items-baseline gap-1"
+                          :title="`${v.files.audio_segments.length} parts — reveal segments folder`">
+                    <span>AUDIO</span>
+                    <span class="num text-xs" x-text="v.files.audio_segments.length + '×'"></span>
+                  </button>
+                </template>
+                <template x-if="!v.files?.audio_full && (!v.files?.audio_segments || v.files.audio_segments.length === 0)">
+                  <span class="label text-faint line-through cursor-default" title="Audio not extracted">AUDIO</span>
+                </template>
+
+                <!-- Folder reveal (parent dir of video) -->
+                <button @click.stop="revealPath(v.files?.video ? videoParentDir(v.files.video) : 'output/videos')"
+                        class="text-faint hover:text-tape transition-colors"
+                        title="Reveal containing folder in Finder">
+                  <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none">
+                    <path d="M1.5 4h4l1.5 1.5h7.5v8.5h-13V4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="miter"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Images tab ──────────────────────────────────────── -->
+      <div x-show="tab === 'images'" class="tab-content">
+        <template x-if="!currentJob?.creator_images || currentJob.creator_images.length === 0">
+          <div class="text-faint italic py-12 text-center">— No photographs collected yet —</div>
+        </template>
+
+        <div x-show="currentJob?.creator_images?.length" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-12">
+          <template x-for="(img, idx) in (currentJob?.creator_images || [])" :key="img.file">
+            <figure class="flex flex-col group cursor-pointer" @click="revealPath(img.file)" title="Reveal in Finder">
+              <div class="frame-corners aspect-square bg-paperDeep overflow-hidden text-ink group-hover:text-tape relative transition-colors">
+                <span class="fc-bl"></span><span class="fc-br"></span>
+                <img :src="`/api/jobs/${currentJob.job_id}/files/${encodeURI(img.file)}`" class="w-full h-full object-cover">
+              </div>
+              <figcaption class="mt-3 flex items-baseline justify-between">
+                <div>
+                  <div class="num text-xs text-faint">№ <span x-text="String(idx+1).padStart(2,'0')"></span></div>
+                  <div class="label text-ink mt-1" x-text="img.source.replace(/_/g,' ')"></div>
+                </div>
+                <template x-if="img.score">
+                  <div class="num text-xs text-smoke">match <span x-text="img.score.toFixed(2)"></span></div>
+                </template>
+              </figcaption>
+            </figure>
+          </template>
+        </div>
+
+        <!-- Re-pick faces button -->
+        <div x-show="currentJob?.creator_images?.length" class="mt-12 pt-8 border-t rule flex items-center justify-between">
+          <div class="text-smoke text-sm">
+            Photos chosen automatically by face match. Refine selection if needed.
+          </div>
+          <button @click="openFaceModal()" class="flex items-center gap-3 px-5 py-2.5 border rule-ink text-ink hover:bg-ink hover:text-paper transition-colors">
+            <span class="label">Re-pick creator</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Log tab ──────────────────────────────────────── -->
+      <div x-show="tab === 'log'" class="tab-content">
+        <div class="border rule bg-paperDeep">
+          <div class="px-5 py-3 border-b rule flex items-center justify-between">
+            <span class="label text-faint">stdout · stderr</span>
+            <button @click="loadLog()" class="label text-faint hover:text-ink transition-colors">Refresh ↻</button>
+          </div>
+          <pre class="num text-xs text-ink leading-relaxed p-5 overflow-x-auto whitespace-pre-wrap max-h-[600px]" x-text="logText || '— empty —'"></pre>
+        </div>
+      </div>
+
+    </section>
+
+    <div class="h-32"></div>
+  </main>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       FACE CONFIRMATION MODAL
+       ═══════════════════════════════════════════════════════════════ -->
+  <div x-show="faceModalOpen" x-transition.opacity x-cloak class="fixed inset-0 z-50 overlay-enter">
+    <div class="absolute inset-0 bg-ink/80" @click="closeFaceModal()"></div>
+
+    <div class="relative max-w-4xl mx-auto mt-16 mb-16 bg-paper border rule-ink shadow-2xl modal-enter">
+      <!-- Modal header -->
+      <div class="px-8 py-5 border-b rule flex items-baseline justify-between">
+        <div>
+          <div class="label text-faint">Face confirmation</div>
+          <div class="display-serif text-2xl text-ink mt-1">Who is the creator?</div>
+        </div>
+        <button @click="closeFaceModal()" class="text-faint hover:text-ink transition-colors text-xl no-select" aria-label="Close">✕</button>
+      </div>
+
+      <!-- Body -->
+      <div class="px-8 py-7">
+        <p class="text-smoke text-sm leading-relaxed mb-8 max-w-2xl">
+          The channel avatar did not contain a recognizable face. Select the creator from the candidates below — these are faces detected across the collected video thumbnails. Your selection will be used to find more photos of this person.
+        </p>
+
+        <template x-if="!faceCandidates.length">
+          <div class="text-faint italic py-12 text-center label">— loading candidates —</div>
+        </template>
+
+        <div x-show="faceCandidates.length" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-x-6 gap-y-8">
+          <template x-for="cand in faceCandidates" :key="cand.face_id">
+            <button
+              @click="selectedFaceId = cand.face_id"
+              class="text-left group"
+            >
+              <div
+                class="frame-corners aspect-square bg-paperDeep overflow-hidden relative"
+                :class="selectedFaceId === cand.face_id ? 'text-tape' : 'text-rule group-hover:text-ink'"
+              >
+                <span class="fc-bl"></span><span class="fc-br"></span>
+                <img :src="`/api/jobs/${currentJob.job_id}/files/${encodeURI(cand.crop)}`" class="w-full h-full object-cover">
+                <div x-show="selectedFaceId === cand.face_id" class="absolute inset-0 ring-2 ring-tape ring-inset pointer-events-none"></div>
+              </div>
+              <div class="mt-2 flex items-baseline justify-between">
+                <span class="label" :class="selectedFaceId === cand.face_id ? 'text-tape' : 'text-faint'" x-text="cand.face_id.slice(0,6)"></span>
+                <template x-if="cand.occurrences">
+                  <span class="num text-xs text-faint">×<span x-text="cand.occurrences"></span></span>
+                </template>
+              </div>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="px-8 py-5 border-t rule flex items-center justify-between bg-paperDeep">
+        <button @click="closeFaceModal()" class="label text-faint hover:text-ink transition-colors">Skip</button>
+        <button
+          @click="confirmFace()"
+          :disabled="!selectedFaceId || confirming"
+          class="flex items-center gap-3 px-6 py-2.5 bg-ink text-paper hover:bg-tape transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <span class="label" x-text="confirming ? 'Confirming…' : 'Confirm selection'"></span>
+          <svg class="w-3 h-3" viewBox="0 0 12 12" fill="none">
+            <path d="M2 6l3 3 6-7" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TOAST notifications (top-right)
+       ═══════════════════════════════════════════════════════════════ -->
+  <div class="fixed top-6 right-6 z-50 space-y-3 pointer-events-none">
+    <template x-for="t in toasts" :key="t.id">
+      <div class="toast-enter pointer-events-auto bg-ink text-paper px-5 py-4 max-w-sm shadow-xl border-l-2"
+           :class="t.kind === 'error' ? 'border-tape' : 'border-forest'">
+        <div class="label mb-1" :class="t.kind === 'error' ? 'text-tape' : 'text-forest'" x-text="t.kind"></div>
+        <div class="text-sm leading-snug" x-text="t.message"></div>
+      </div>
+    </template>
+  </div>
+
+</div>
+
+
+<!-- ═════════════════════════════════════════════════════════════════
+     APP LOGIC
+     ═════════════════════════════════════════════════════════════════ -->
+<script>
+function app() {
+  return {
+    // — View state —
+    view: 'home',                  // 'home' | 'detail'
+    tab: 'videos',                 // 'videos' | 'images' | 'log'
+    loading: false,
+    submitting: false,
+    showAdvanced: false,
+
+    // — Data —
+    jobs: [],
+    currentJob: null,              // full manifest
+    status: null,                  // live status.json
+    logText: '',
+
+    // — Form —
+    form: {
+      channel_url: '',
+      latest_count: 5,
+      popular_count: 5,
+      audio_bitrate: '64k',
+      max_audio_mib: 10,
+      languages: ['en','zh','ja','ko'],
+      skip_shorts: true,
+      asr_fallback: false,
+      asr_model: 'small'
+    },
+
+    // — Face modal —
+    faceModalOpen: false,
+    faceCandidates: [],
+    selectedFaceId: null,
+    confirming: false,
+
+    // — Toasts —
+    toasts: [],
+    _toastSeq: 0,
+
+    // — Internals —
+    _pollTimer: null,
+    _lastStage: null,
+
+    // — Example channels shown in empty state —
+    exampleChannels: [
+      { name: 'Tom Scott',  tag: 'docs · english', url: 'https://www.youtube.com/@TomScottGo' },
+      { name: 'MKBHD',      tag: 'tech · english', url: 'https://www.youtube.com/@mkbhd' },
+      { name: 'Fireship',   tag: 'coding · short', url: 'https://www.youtube.com/@fireship_dev' },
+    ],
+
+    // — Stage definitions (mirrors backend STAGES) —
+    stages: [
+      { name: 'resolve_channel',  label: 'Resolve channel' },
+      { name: 'select_videos',    label: 'Select videos' },
+      { name: 'download_media',   label: 'Download media' },
+      { name: 'audio',            label: 'Extract audio & split' },
+      { name: 'subtitles',        label: 'Process subtitles (+ ASR)' },
+      { name: 'creator_images',   label: 'Identify creator photos' },
+    ],
+
+    // ─── Lifecycle ──────────────────────────────────────────
+    async init() {
+      this.handleRoute();
+      window.addEventListener('hashchange', () => this.handleRoute());
+      await this.loadJobs();
+      // Refresh history every 4s while on home (catches running jobs progress)
+      setInterval(() => { if (this.view === 'home') this.loadJobs(true); }, 4000);
+    },
+
+    handleRoute() {
+      const h = window.location.hash;
+      const m = h.match(/^#\/jobs\/(.+)$/);
+      if (m) {
+        this.openJob(m[1]);
+      } else {
+        this.view = 'home';
+        this.stopPolling();
+      }
+    },
+
+    // ─── API helpers ────────────────────────────────────────
+    async api(path, opts = {}) {
+      const r = await fetch(`/api${path}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+      });
+      if (!r.ok) {
+        let msg = `HTTP ${r.status}`;
+        try { const j = await r.json(); msg = j.detail || j.message || msg; } catch(_){}
+        throw new Error(msg);
+      }
+      // Allow plain text responses
+      const ct = r.headers.get('content-type') || '';
+      return ct.includes('json') ? r.json() : r.text();
+    },
+
+    // ─── Jobs list ──────────────────────────────────────────
+    async loadJobs(silent = false) {
+      if (!silent) this.loading = true;
+      try {
+        this.jobs = await this.api('/jobs');
+      } catch (e) {
+        this.toast('error', `Failed to load jobs: ${e.message}`);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async submitJob() {
+      if (!this.form.channel_url) return;
+      this.submitting = true;
+      try {
+        const opts = {
+          latest_count: this.form.latest_count,
+          popular_count: this.form.popular_count,
+          audio_bitrate: this.form.audio_bitrate,
+          max_audio_mib: this.form.max_audio_mib,
+          languages: this.form.languages,
+          skip_shorts: this.form.skip_shorts,
+          asr_fallback: this.form.asr_fallback,
+          asr_model: this.form.asr_model,
+        };
+        const res = await this.api('/jobs', {
+          method: 'POST',
+          body: JSON.stringify({ channel_url: this.form.channel_url, options: opts })
+        });
+        this.toast('ok', `Collection started`);
+        this.form.channel_url = '';
+        await this.loadJobs();
+        if (res.job_id) this.openJob(res.job_id);
+      } catch (e) {
+        this.toast('error', `Could not start collection: ${e.message}`);
+      } finally {
+        this.submitting = false;
+      }
+    },
+
+    // ─── Detail view ────────────────────────────────────────
+    async openJob(jobId) {
+      this.view = 'detail';
+      this.tab = 'videos';
+      this.currentJob = null;
+      this.status = null;
+      this.logText = '';
+      window.location.hash = `#/jobs/${jobId}`;
+      try {
+        const [manifest, status] = await Promise.all([
+          this.api(`/jobs/${jobId}`),
+          this.api(`/jobs/${jobId}/status`)
+        ]);
+        this.currentJob = manifest;
+        this.status = status;
+        this.startPolling(jobId);
+      } catch (e) {
+        this.toast('error', `Failed to load collection: ${e.message}`);
+      }
+    },
+
+    backToHome() {
+      window.location.hash = '';
+      this.view = 'home';
+      this.stopPolling();
+    },
+
+    startPolling(jobId) {
+      this.stopPolling();
+      this._lastStage = this.status?.stage || null;
+      this._pollTimer = setInterval(async () => {
+        try {
+          const s = await this.api(`/jobs/${jobId}/status`);
+          const stageChanged = s.stage !== this._lastStage;
+          this.status = s;
+          // Refresh full manifest when stage transitions — this surfaces
+          // newly-resolved channel info, freshly-downloaded videos, etc.
+          if (stageChanged) {
+            this._lastStage = s.stage;
+            try { this.currentJob = await this.api(`/jobs/${jobId}`); } catch(_) {}
+          }
+          if (s.status === 'completed' || s.status === 'failed' || s.status === 'needs_face_confirmation') {
+            try { this.currentJob = await this.api(`/jobs/${jobId}`); } catch(_) {}
+            this.stopPolling();
+          }
+        } catch (e) {
+          // ignore transient
+        }
+      }, 2000);
+    },
+
+    stopPolling() {
+      if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+    },
+
+    async loadLog() {
+      if (!this.currentJob) return;
+      try {
+        this.logText = await this.api(`/jobs/${this.currentJob.job_id}/log`);
+      } catch (e) {
+        this.logText = `(failed to load log: ${e.message})`;
+      }
+    },
+
+    // ─── Retry & stale detection ────────────────────────────
+    isStale(jobOrStatus) {
+      // Accepts either a job summary (from index, has updated_at + status)
+      // or a status object. Returns true if running/pending but updated_at
+      // is older than 4 minutes.
+      const status = jobOrStatus?.status;
+      if (status !== 'running' && status !== 'pending') return false;
+      const ts = jobOrStatus?.updated_at || jobOrStatus?.created_at;
+      if (!ts) return false;
+      try {
+        const age = (Date.now() - new Date(ts).getTime()) / 1000;
+        return age > 240;  // > 4 min without progress
+      } catch (e) { return false; }
+    },
+
+    canRetryCurrent() {
+      const s = this.status;
+      if (!s) return false;
+      if (s.status === 'failed') return true;
+      if ((s.status === 'running' || s.status === 'pending') && this.isStale(s)) return true;
+      return false;
+    },
+
+    async retryJob(jobId) {
+      try {
+        await this.api(`/jobs/${jobId}/retry`, { method: 'POST' });
+        this.toast('ok', 'Retry queued', 2500);
+        await this.loadJobs(true);
+      } catch (e) {
+        this.toast('error', `Retry failed: ${e.message}`);
+      }
+    },
+
+    async retryCurrentJob() {
+      if (!this.currentJob) return;
+      const id = this.currentJob.job_id;
+      try {
+        await this.api(`/jobs/${id}/retry`, { method: 'POST' });
+        this.toast('ok', 'Retry queued', 2500);
+        // refresh + resume polling
+        this.status = await this.api(`/jobs/${id}/status`);
+        this.currentJob = await this.api(`/jobs/${id}`);
+        this.startPolling(id);
+      } catch (e) {
+        this.toast('error', `Retry failed: ${e.message}`);
+      }
+    },
+
+    // ─── Subtitle source styling ────────────────────────────
+    subSourceClass(source) {
+      // manual = ink (bold, primary)
+      // auto   = smoke (regular, lighter)
+      // asr    = sienna (highlighted — AI-generated)
+      if (source === 'manual') return 'text-ink';
+      if (source === 'auto')   return 'text-smoke';
+      if (source === 'asr')    return 'text-sienna';
+      return 'text-ink';
+    },
+
+    // ─── Path helpers ────────────────────────────────────────
+    videoParentDir(path) {
+      if (!path) return 'output/videos';
+      const i = path.lastIndexOf('/');
+      return i > 0 ? path.slice(0, i) : path;
+    },
+
+    async deleteJobFromList(jobId, channelTitle) {
+      const name = channelTitle || jobId;
+      if (!confirm(`Delete the entire collection for "${name}"?\n\nAll downloaded videos, audio, subtitles, and images for this job will be permanently removed.`)) return;
+      try {
+        await this.api(`/jobs/${jobId}`, { method: 'DELETE' });
+        this.toast('ok', `Deleted "${name}"`, 2500);
+        await this.loadJobs();
+      } catch (e) {
+        this.toast('error', `Delete failed: ${e.message}`);
+      }
+    },
+
+    async copyToClipboard(text, label) {
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        this.toast('ok', `${label || 'Copied'} → clipboard`, 1500);
+      } catch (e) {
+        // Fallback for older browsers
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          this.toast('ok', `${label || 'Copied'} → clipboard`, 1500);
+        } catch (_) {
+          this.toast('error', 'Copy failed');
+        } finally {
+          document.body.removeChild(ta);
+        }
+      }
+    },
+
+    async revealPath(path) {
+      if (!this.currentJob) return;
+      try {
+        await this.api(`/jobs/${this.currentJob.job_id}/reveal`, {
+          method: 'POST',
+          body: JSON.stringify({ path: path || '' })
+        });
+        // Subtle confirmation
+        this.toast('ok', path ? 'Revealing in Finder…' : 'Opening folder…', 1800);
+      } catch (e) {
+        this.toast('error', `Reveal failed: ${e.message}`);
+      }
+    },
+
+    async deleteCurrentJob() {
+      if (!this.currentJob) return;
+      if (!confirm(`Delete this entire collection?\n\nFiles cannot be recovered.`)) return;
+      try {
+        await this.api(`/jobs/${this.currentJob.job_id}`, { method: 'DELETE' });
+        this.toast('ok', 'Collection deleted');
+        this.backToHome();
+        await this.loadJobs();
+      } catch (e) {
+        this.toast('error', `Delete failed: ${e.message}`);
+      }
+    },
+
+    // ─── Face confirmation ──────────────────────────────────
+    async openFaceModal() {
+      if (!this.currentJob) return;
+      this.faceModalOpen = true;
+      this.faceCandidates = [];
+      this.selectedFaceId = null;
+      try {
+        const r = await this.api(`/jobs/${this.currentJob.job_id}/face-candidates`);
+        this.faceCandidates = Array.isArray(r) ? r : (r.candidates || []);
+      } catch (e) {
+        this.toast('error', `Could not load candidates: ${e.message}`);
+      }
+    },
+
+    closeFaceModal() {
+      this.faceModalOpen = false;
+      this.faceCandidates = [];
+      this.selectedFaceId = null;
+    },
+
+    async confirmFace() {
+      if (!this.selectedFaceId) return;
+      this.confirming = true;
+      try {
+        await this.api(`/jobs/${this.currentJob.job_id}/confirm-face`, {
+          method: 'POST',
+          body: JSON.stringify({ face_id: this.selectedFaceId })
+        });
+        this.toast('ok', 'Selection confirmed — re-running image collection');
+        this.closeFaceModal();
+        // refresh manifest after a tick
+        setTimeout(() => this.openJob(this.currentJob.job_id), 600);
+      } catch (e) {
+        this.toast('error', `Confirmation failed: ${e.message}`);
+      } finally {
+        this.confirming = false;
+      }
+    },
+
+    // ─── Toasts ─────────────────────────────────────────────
+    toast(kind, message, ttl = 4000) {
+      const id = ++this._toastSeq;
+      this.toasts.push({ id, kind, message });
+      setTimeout(() => {
+        this.toasts = this.toasts.filter(t => t.id !== id);
+      }, ttl);
+    },
+
+    // ─── Formatting helpers ─────────────────────────────────
+    formatDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (isNaN(d)) return iso;
+      const pad = n => String(n).padStart(2,'0');
+      return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    },
+    formatViews(n) {
+      if (n == null) return '—';
+      if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+      if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+      return String(n);
+    },
+    formatDuration(sec) {
+      if (!sec) return '—';
+      const h = Math.floor(sec/3600);
+      const m = Math.floor((sec%3600)/60);
+      const s = Math.floor(sec%60);
+      const pad = n => String(n).padStart(2,'0');
+      return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+    },
+    tabCount() {
+      if (!this.currentJob) return '';
+      if (this.tab === 'videos') return `${this.currentJob.videos?.length || 0} entries`;
+      if (this.tab === 'images') return `${this.currentJob.creator_images?.length || 0} photographs`;
+      if (this.tab === 'log')    return 'verbose output';
+      return '';
+    },
+
+    // ─── Stage helpers ──────────────────────────────────────
+    stageStatus(name) {
+      const s = this.status;
+      if (!s) return 'pending';
+      const idxOf = (n) => this.stages.findIndex(st => st.name === n);
+      const myIdx = idxOf(name);
+      const curIdx = idxOf(s.stage);
+
+      if (s.status === 'completed') return 'done';
+      if (s.status === 'needs_face_confirmation') {
+        // creator_images is paused awaiting input — treat earlier stages as done
+        const ciIdx = idxOf('creator_images');
+        return myIdx < ciIdx ? 'done' : (myIdx === ciIdx ? 'running' : 'pending');
+      }
+      if (s.status === 'failed') {
+        if (myIdx < curIdx) return 'done';
+        if (myIdx === curIdx) return 'failed';
+        return 'pending';
+      }
+      // running / pending
+      if (curIdx < 0) return 'pending';
+      if (myIdx < curIdx) return 'done';
+      if (myIdx === curIdx) return 'running';
+      return 'pending';
+    },
+
+    stageActionShort(action) {
+      if (!action) return '';
+      // Trim "X starting" boilerplate and show first ~40 chars
+      let t = String(action).replace(/^[a-z_]+ starting$/, '…');
+      if (t.length > 50) t = t.slice(0, 47) + '…';
+      return t;
+    },
+
+    stageDoneSummary(name) {
+      const j = this.currentJob;
+      if (!j) return '';
+      if (name === 'resolve_channel') return j.channel?.title ? '✓' : '';
+      if (name === 'select_videos')   return j.videos?.length ? `${j.videos.length} picked` : '';
+      if (name === 'download_media') {
+        const n = (j.videos || []).filter(v => v.files?.video).length;
+        return n ? `${n} / ${j.videos.length}` : '';
+      }
+      if (name === 'subtitles') {
+        let count = 0, total = 0;
+        for (const v of (j.videos || [])) {
+          for (const lang of (j.config?.languages || ['en','zh','ja','ko'])) {
+            total++;
+            if (v.files?.transcripts?.[lang]) count++;
+          }
+        }
+        return total ? `${count} / ${total} subs` : '';
+      }
+      if (name === 'audio') {
+        const total = (j.videos || []).length;
+        const done = (j.videos || []).filter(v => v.files?.audio_full).length;
+        return done ? `${done} / ${total}` : '';
+      }
+      if (name === 'creator_images') {
+        return j.creator_images?.length ? `${j.creator_images.length} photos` : '';
+      }
+      return '';
+    },
+
+    channelHandleFromUrl(url) {
+      if (!url) return '';
+      const m = url.match(/\/(@[^/?#]+)/);
+      if (m) return m[1];
+      const m2 = url.match(/\/channel\/([^/?#]+)/);
+      if (m2) return m2[1];
+      return '';
+    }
+  };
+}
+</script>
+
+</body>
+</html>
