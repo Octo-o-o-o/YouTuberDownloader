@@ -220,6 +220,11 @@ def _fetch_extra_thumbnails(ctx, exclude_ids: set[str], limit: int) -> list[tupl
     channel = ctx.manifest.channel
     if not channel.handle and not channel.channel_id:
         return []
+    # Single-video / non-YouTube channels have nothing to enumerate.
+    url_host = (channel.url or "").lower()
+    is_youtube = "youtube.com" in url_host or "youtu.be" in url_host
+    if not is_youtube:
+        return []
     list_url = (
         f"https://www.youtube.com/channel/{channel.channel_id}/videos"
         if channel.channel_id and channel.channel_id.startswith("UC")

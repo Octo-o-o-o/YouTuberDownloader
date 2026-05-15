@@ -339,20 +339,21 @@
         Archive a creator.
       </h1>
       <p class="text-smoke text-lg max-w-2xl leading-relaxed mb-14">
-        Paste a YouTube channel link below. The system will collect their
-        <span class="text-ink">latest 5</span> and <span class="text-ink">most-viewed 5</span> videos,
-        with subtitles in <span class="font-mono text-sm bg-paperDeep px-1.5 py-0.5">en · zh · ja · ko</span>,
+        Paste a YouTube channel link, a single video URL, or an x.com post.
+        For channels we collect <span class="text-ink">latest 5</span> + <span class="text-ink">most-viewed 5</span>;
+        for single videos we just process that one. Either way: subtitles in
+        <span class="font-mono text-sm bg-paperDeep px-1.5 py-0.5">en · zh · ja · ko</span>,
         audio split for transcription, and identifying photographs.
       </p>
 
       <!-- Intake form -->
       <form @submit.prevent="submitJob()" class="max-w-3xl">
-        <label class="label text-faint block mb-2">Channel URL</label>
+        <label class="label text-faint block mb-2">Channel · Video · x.com URL</label>
         <div class="flex items-center gap-6">
           <input
             type="url"
             x-model="form.channel_url"
-            placeholder="https://www.youtube.com/@..."
+            placeholder="youtube.com/@handle  ·  youtu.be/VIDEO_ID  ·  x.com/user/status/123…"
             class="editorial-input flex-1"
             required
             :disabled="submitting"
@@ -454,8 +455,30 @@
       <div class="flex items-baseline justify-between mb-10">
         <div class="label text-ink">02 — Archive Log</div>
         <div class="label text-faint num">
-          <span x-text="jobs.length"></span> <span>records</span>
+          <template x-if="archiveFilter === 'all'">
+            <span><span x-text="jobs.length"></span> records</span>
+          </template>
+          <template x-if="archiveFilter !== 'all'">
+            <span><span x-text="filteredJobs().length"></span> of <span x-text="jobs.length"></span> records</span>
+          </template>
         </div>
+      </div>
+
+      <!-- Filter tabs (hidden until we have at least one record) -->
+      <div x-show="jobs.length > 0" class="flex items-baseline gap-10 border-b rule mb-8">
+        <template x-for="f in archiveFilters" :key="f.key">
+          <button
+            type="button"
+            class="tab-trigger label flex items-baseline gap-2"
+            :class="archiveFilter === f.key ? 'text-ink' : 'text-faint hover:text-smoke'"
+            :data-active="archiveFilter === f.key"
+            @click="archiveFilter = f.key"
+          >
+            <span x-text="f.label"></span>
+            <span class="num text-faint normal-case" style="font-size:10px; letter-spacing:0.08em"
+                  x-text="countByFilter(f.key)"></span>
+          </button>
+        </template>
       </div>
 
       <!-- Empty state with clickable examples -->
@@ -491,9 +514,16 @@
         </template>
       </div>
 
+      <!-- No-match state (have jobs, but none match the current filter) -->
+      <div x-show="!loading && jobs.length > 0 && filteredJobs().length === 0"
+           class="border rule p-12 text-center">
+        <div class="display-serif text-2xl text-smoke italic mb-2">No records of this kind.</div>
+        <p class="text-faint">Try a different tab, or paste a new URL above.</p>
+      </div>
+
       <!-- Job rows -->
-      <div x-show="!loading && jobs.length > 0" class="border rule">
-        <template x-for="(job, idx) in jobs" :key="job.job_id">
+      <div x-show="!loading && filteredJobs().length > 0" class="border rule">
+        <template x-for="(job, idx) in filteredJobs()" :key="job.job_id">
           <a
             :href="`#/jobs/${job.job_id}`"
             @click.prevent="openJob(job.job_id)"
@@ -501,7 +531,7 @@
           >
             <div class="flex items-center gap-7">
               <!-- Index number -->
-              <div class="num text-faint text-xs w-7" x-text="String(jobs.length - idx).padStart(2,'0')"></div>
+              <div class="num text-faint text-xs w-7" x-text="String(filteredJobs().length - idx).padStart(2,'0')"></div>
 
               <!-- Avatar -->
               <div class="w-12 h-12 bg-paperDeep flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -524,9 +554,19 @@
                   </template>
                 </div>
                 <div class="mt-1 flex items-center gap-3 text-smoke text-sm">
+                  <span class="badge"
+                        :class="{
+                          'text-faint':  sourceTypeOf(job).kind === 'channel',
+                          'text-tape':   sourceTypeOf(job).kind === 'youtube_video',
+                          'text-sienna': sourceTypeOf(job).kind === 'x_video'
+                        }"
+                        x-text="sourceTypeOf(job).label"></span>
                   <span class="num text-xs" x-text="formatDate(job.created_at)"></span>
                   <span class="text-ruleDeep">·</span>
-                  <span class="num text-xs"><span x-text="job.video_count || 0"></span> items</span>
+                  <span class="num text-xs">
+                    <span x-text="job.video_count || 0"></span>
+                    <span x-text="(job.video_count === 1) ? 'item' : 'items'"></span>
+                  </span>
                   <template x-if="job.image_count">
                     <span class="text-ruleDeep">·</span>
                   </template>
@@ -1115,6 +1155,15 @@ function app() {
     submitting: false,
     showAdvanced: false,
 
+    // — Archive filter —
+    archiveFilter: 'all',                  // 'all' | 'channel' | 'youtube_video' | 'x_video'
+    archiveFilters: [
+      { key: 'all',           label: 'all' },
+      { key: 'channel',       label: 'YT channel' },
+      { key: 'youtube_video', label: 'YT video' },
+      { key: 'x_video',       label: 'x.com' },
+    ],
+
     // — Data —
     jobs: [],
     currentJob: null,              // full manifest
@@ -1150,9 +1199,10 @@ function app() {
 
     // — Example channels shown in empty state —
     exampleChannels: [
-      { name: 'Tom Scott',  tag: 'docs · english', url: 'https://www.youtube.com/@TomScottGo' },
-      { name: 'MKBHD',      tag: 'tech · english', url: 'https://www.youtube.com/@mkbhd' },
-      { name: 'Fireship',   tag: 'coding · short', url: 'https://www.youtube.com/@fireship_dev' },
+      { name: 'Tom Scott',         tag: 'channel · docs',      url: 'https://www.youtube.com/@TomScottGo' },
+      { name: 'MKBHD',             tag: 'channel · tech',      url: 'https://www.youtube.com/@mkbhd' },
+      { name: 'Single YouTube',    tag: 'one video · YouTube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      { name: 'Single x.com post', tag: 'one video · x.com',   url: 'https://x.com/Twitter/status/1445078208190291973' },
     ],
 
     // — Stage definitions (mirrors backend STAGES) —
@@ -1583,6 +1633,31 @@ function app() {
       const m2 = url.match(/\/channel\/([^/?#]+)/);
       if (m2) return m2[1];
       return '';
+    },
+
+    // Jobs matching the current archive filter.
+    filteredJobs() {
+      if (this.archiveFilter === 'all') return this.jobs;
+      return this.jobs.filter(j => this.sourceTypeOf(j).kind === this.archiveFilter);
+    },
+
+    countByFilter(key) {
+      if (key === 'all') return this.jobs.length;
+      return this.jobs.filter(j => this.sourceTypeOf(j).kind === key).length;
+    },
+
+    // Classify the source URL of a job into one of three kinds; keep in sync
+    // with backend/collector/single_video.py::is_single_video_url.
+    sourceTypeOf(job) {
+      const u = (job?.channel_url || '').trim();
+      if (/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/[^/]+\/status\/\d+/i.test(u)) {
+        return { kind: 'x_video', label: 'x.com video' };
+      }
+      const ytVideo =
+        /^https?:\/\/(?:www\.|m\.)?youtube\.com\/(?:watch\?|shorts\/|live\/)/i.test(u) ||
+        /^https?:\/\/(?:www\.)?youtu\.be\/[A-Za-z0-9_-]+/i.test(u);
+      if (ytVideo) return { kind: 'youtube_video', label: 'YT video' };
+      return { kind: 'channel', label: 'YT channel' };
     }
   };
 }

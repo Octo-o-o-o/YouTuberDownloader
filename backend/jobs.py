@@ -136,6 +136,7 @@ class JobRunner:
         # Imported here to avoid circular imports at module load
         from .collector import channel as ch_mod
         from .collector import selector as sel_mod
+        from .collector import single_video as sv_mod
         from .collector import downloader as dl_mod
         from .collector import subtitles as sub_mod
         from .collector import audio as audio_mod
@@ -145,19 +146,28 @@ class JobRunner:
         if not manifest:
             return
         ctx = JobContext(job_id, manifest)
+        single_mode = sv_mod.is_single_video_url(manifest.channel.url)
 
         try:
             ctx.log("=== Job start ===")
+            if single_mode:
+                ctx.log("URL detected as single video — channel-listing stages will be skipped")
 
-            # ─── Stage 1: resolve channel ────────────────────────────
+            # ─── Stage 1: resolve channel (or single-video metadata) ─
             ctx.begin_stage("resolve_channel", total=1)
-            ch_mod.resolve(ctx)
+            single_record = sv_mod.resolve(ctx) if single_mode else None
+            if not single_mode:
+                ch_mod.resolve(ctx)
             ctx.save()  # persist channel info before status sync, so jobs.jsonl picks up title
             ctx.stage_progress(1, 1, action=f"channel: {manifest.channel.title or manifest.channel.url}")
 
-            # ─── Stage 2: select videos ──────────────────────────────
+            # ─── Stage 2: select videos (skipped in single-video mode) ─
             ctx.begin_stage("select_videos", total=1)
-            sel_mod.select(ctx)
+            if single_mode:
+                manifest.videos = [single_record]
+                ctx.log("Single-video mode: 1 video, skipping selector")
+            else:
+                sel_mod.select(ctx)
             ctx.save()
             ctx.stage_progress(1, 1, action=f"selected {len(manifest.videos)} videos")
 

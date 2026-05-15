@@ -1,6 +1,11 @@
 # YT Creator Archive
 
-> 本地自用的 YouTube 博主数据采集工具。一条命令或一次 URL 粘贴，自动产出"最新 5 + 播放最多 5"视频、音频（≤10MiB 智能切分）、4 语种独立字幕 md、博主本人照片。
+> 本地自用的视频数据采集工具。一条命令或一次 URL 粘贴，自动产出视频 + 音频（≤10MiB 智能切分）+ 4 语种独立字幕 md + 博主本人照片。
+>
+> **三种输入皆可**：
+> - **YouTube 频道**（`@handle` / `channel/UC...`）→ 抓"最新 5 + 播放最多 5"
+> - **单条 YouTube 视频**（`watch?v=...` / `youtu.be/...` / `shorts/...`）→ 只处理这一条
+> - **单条 x.com / Twitter 视频**（`x.com/<user>/status/<id>`）→ 只处理这一条；字幕几乎一定缺失，建议配合 `--asr` 使用
 
 数据全部保存到本地 `data/` 目录，JSONL 索引 + 每 job 一份 `manifest.json`，无数据库，无认证。
 
@@ -59,8 +64,11 @@ cd YouTubeDownload
 
 操作流程：
 
-1. 顶部输入频道 URL（`@handle` / `/channel/UC...` / 任意视频 URL 都接受）
-2. 点 **Begin collection**；展开 **Advanced options** 可改 latest/popular 数量、4 语种、音频码率、ASR 模型
+1. 顶部输入 URL — 三种格式都接受：
+   - YouTube 频道：`@handle` / `/channel/UC...`
+   - 单条 YouTube 视频：`watch?v=...` / `youtu.be/...` / `shorts/...` / `live/...`
+   - 单条 x.com（Twitter）视频：`x.com/<user>/status/<id>`
+2. 点 **Begin collection**；展开 **Advanced options** 可改 latest/popular 数量、4 语种、音频码率、ASR 模型。单条视频模式下 latest/popular 自动忽略。
 3. 实时看 6 阶段清单进度，每行视频直接显示 EN/ZH/JA/KO + VIDEO + AUDIO + 文件夹按钮，点击 **reveal in Finder**
 4. 出错或卡死任务：状态徽章变为 `failed · retry ↻`，一键续跑（已下载文件不重复下）
 5. 服务重启会自动把所有 running 任务标为 failed，方便发现 + retry
@@ -80,6 +88,12 @@ python -m backend.cli @TomScottGo
 # 只要 3 个最新的、英文字幕
 python -m backend.cli https://www.youtube.com/@mkbhd --latest 3 --popular 0 --langs en
 
+# 单条 YouTube 视频（latest/popular 自动忽略）
+python -m backend.cli "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+# 单条 x.com 视频 + ASR（推文几乎无字幕，建议开 ASR）
+python -m backend.cli "https://x.com/<user>/status/<id>" --asr --asr-model small
+
 # 启用 ASR 兜底，medium 模型（适合中日韩内容）
 python -m backend.cli @01coder30 --asr --asr-model medium
 
@@ -94,7 +108,7 @@ python -m backend.cli @mkbhd -q --no-color > run.log
 
 ```
 positional:
-  channel_url           频道 URL、@handle、或 UC... ID
+  channel_url           频道 URL / @handle / UC... ID / 单条视频 URL (YouTube · x.com)
 
 options:
   --latest N            最新视频数（默认 5）
@@ -217,6 +231,12 @@ YouTube 限流。一会儿再试，或减少 `--scan-size`。yt-dlp 也会随版
 
 **Q：跨平台？**
 后端跨平台。`open -R`（Finder reveal）走 macOS；Linux 用 `xdg-open` 打开父目录；Windows 用 `explorer /select,`。已经做了兼容。
+
+**Q：x.com 链接的注意事项？**
+- 只支持**单条推文**（`x.com/<user>/status/<id>`）。"按用户抓全部"或"按关键词搜"暂未实现，原因是 X 现在大多需要登录态/cookies，做下来要单独的认证流程。
+- 推文几乎都没有官方字幕，所以四语种 md 默认全空。建议加 `--asr` 让 Whisper 转录推文音频原语种（中/英/日/韩任一种），其它语种依旧空缺（Whisper 不能跨语种翻译）。
+- 没有"频道头像/Banner"概念，`creator_images` 阶段会自动降级：只用视频自身的缩略图筛人脸；若没有可识别人脸，会落到"unverified"标记。
+- 受保护账号 / 删除推文 / 转推视频会失败，yt-dlp 会报具体原因，在 `log.txt` 里能看到。
 
 ---
 

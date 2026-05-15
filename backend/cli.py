@@ -203,29 +203,39 @@ class CLIJobContext:
 def run_pipeline(ctx: CLIJobContext) -> None:
     """Run all stages sequentially. Mutates ctx.manifest in place."""
     # Imported lazily so `--help` doesn't pay the import cost
-    from .collector import audio, channel, downloader, images, selector, subtitles
+    from .collector import audio, channel, downloader, images, selector, single_video, subtitles
 
     manifest = ctx.manifest
     opts = manifest.config
+    single_mode = single_video.is_single_video_url(manifest.channel.url)
 
-    # ── 01 Resolve channel ──────────────────────────────────────
-    ctx.header("01", "Resolve channel")
-    channel.resolve(ctx)
-    ctx.ok(f"{manifest.channel.title} ({manifest.channel.channel_id})")
+    # ── 01 Resolve channel (or single-video metadata) ───────────
+    if single_mode:
+        ctx.header("01", "Resolve single video")
+        record = single_video.resolve(ctx)
+        ctx.ok(f"{manifest.channel.title} — {record.title[:60]}")
+    else:
+        ctx.header("01", "Resolve channel")
+        channel.resolve(ctx)
+        ctx.ok(f"{manifest.channel.title} ({manifest.channel.channel_id})")
     ctx.save()
 
-    # ── 02 Select videos ─────────────────────────────────────────
+    # ── 02 Select videos (skipped in single-video mode) ─────────
     ctx.header("02", "Select videos")
-    selector.select(ctx)
-    if not manifest.videos:
-        ctx.warn("no videos selected — nothing to do")
-        manifest.status = "completed"
-        return
-    sources = " · ".join(
-        f"{tag}={sum(1 for v in manifest.videos if tag in v.source)}"
-        for tag in ("latest", "popular")
-    )
-    ctx.ok(f"{len(manifest.videos)} unique  ({sources})")
+    if single_mode:
+        manifest.videos = [record]
+        ctx.ok("single video — selector skipped")
+    else:
+        selector.select(ctx)
+        if not manifest.videos:
+            ctx.warn("no videos selected — nothing to do")
+            manifest.status = "completed"
+            return
+        sources = " · ".join(
+            f"{tag}={sum(1 for v in manifest.videos if tag in v.source)}"
+            for tag in ("latest", "popular")
+        )
+        ctx.ok(f"{len(manifest.videos)} unique  ({sources})")
     ctx.save()
 
     total = len(manifest.videos)
@@ -300,7 +310,7 @@ def main(argv: list[str] | None = None) -> int:
         description="YT Creator Archive — collect a YouTube creator's videos, subtitles, audio, and identifying photos.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("channel_url", help='YouTube channel URL, "@handle", or "UC..." channel ID')
+    parser.add_argument("channel_url", help='YouTube channel URL / "@handle" / "UC..." ID, or a single video URL (YouTube watch/shorts/live, youtu.be, x.com/<user>/status/<id>)')
     parser.add_argument("--latest",       type=int,   default=5,  help="number of newest videos")
     parser.add_argument("--popular",      type=int,   default=5,  help="number of most-viewed videos")
     parser.add_argument("--langs",        type=str,   default="en,zh,ja,ko", help="comma-separated subtitle languages")
